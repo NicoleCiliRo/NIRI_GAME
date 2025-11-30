@@ -1,0 +1,82 @@
+[
+  {
+    "nombre": "x",
+    "experiencia": "principiante",
+    "puntos": 187,
+    "precision": 66.7,
+    "racha_maxima": 2,
+    "fecha": "2025-11-30 21:45"
+  },
+  {
+    "nombre": "d",
+    "experiencia": "principiante",
+    "puntos": 94,
+    "precision": 100.0,
+    "racha_maxima": 1,
+    "fecha": "2025-11-30 22:08"
+  },
+  {
+    "nombre": "x",
+    "experiencia": "principiante",
+    "puntos": 83,
+    "precision": 33.3,
+    "racha_maxima": 1,
+    "fecha": "2025-11-30 21:54"
+  },
+  {
+    "nombre": "xd",
+    "experiencia": "principiante",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 20:20"
+  },
+  {
+    "nombre": "amanda",
+    "experiencia": "avanzado",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 21:39"
+  },
+  {
+    "nombre": "d",
+    "experiencia": "principiante",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 21:48"
+  },
+  {
+    "nombre": "d",
+    "experiencia": "avanzado",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 21:58"
+  },
+  {
+    "nombre": "d",
+    "experiencia": "avanzado",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 21:58"
+  },
+  {
+    "nombre": "d",
+    "experiencia": "avanzado",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 21:59"
+  },
+  {
+    "nombre": "d",
+    "experiencia": "avanzado",
+    "puntos": 0,
+    "precision": 0.0,
+    "racha_maxima": 0,
+    "fecha": "2025-11-30 22:02"
+  }
+]
