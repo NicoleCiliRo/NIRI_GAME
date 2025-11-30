@@ -656,9 +656,9 @@ class JuegoDeteccionCaries:
         self.ventana.blit(self.fuente_mediana.render(f"Puntos: {self.puntos}", True, COLOR_VERDE), (220, y_stats))
         self.ventana.blit(self.fuente_mediana.render("Vidas: ", True, COLOR_ROJO), (420, y_stats))
         for i in range(self.vidas):
-            pygame.draw.circle(self.ventana, COLOR_ROJO, (510 + i * 30, y_stats + 15), 10)
+            pygame.draw.circle(self.ventana, COLOR_ROJO, (510 + i * 22, y_stats + 12), 8)
         tiempo = int((pygame.time.get_ticks() / 1000) - self.tiempo_inicio)
-        self.ventana.blit(self.fuente_mediana.render(f"Tiempo: {tiempo//60}:{tiempo%60:02d}", True, COLOR_AZUL), (620, y_stats))
+        self.ventana.blit(self.fuente_mediana.render(f"Tiempo: {tiempo//60}:{tiempo%60:02d}", True, COLOR_AZUL), (800, y_stats))
         
         if self.racha >= 3:
             texto_racha = self.fuente_grande.render(f"RACHA x{self.racha}", True, COLOR_AMARILLO)

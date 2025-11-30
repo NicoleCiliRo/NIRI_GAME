@@ -1,0 +1,27 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Game files (if you want to exclude these)
+*.xlsx
+*.mp3
+*.jpg
+fondo_pantalla.jpg
+soundtrak_caries.mp3
