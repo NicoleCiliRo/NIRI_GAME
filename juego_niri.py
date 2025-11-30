@@ -11,6 +11,8 @@ ARCHIVO: juego_caries.py
 # ============================================================================
 
 import pygame
+import pygame_menu
+from pygame_menu import sound
 import json
 import sys
 import math
@@ -39,11 +41,18 @@ ALTO_VENTANA = 820
 COLOR_BLANCO = (255, 255, 255)
 COLOR_NEGRO = (0, 0, 0)
 COLOR_AZUL = (59, 130, 246)
+COLOR_AZUL_OSCURO = (30, 58, 138)
+COLOR_AZUL_CLARO = (96, 165, 250)
 COLOR_VERDE = (34, 197, 94)
+COLOR_VERDE_HOVER = (60, 219, 124)
 COLOR_ROJO = (239, 68, 68)
 COLOR_AMARILLO = (250, 204, 21)
 COLOR_GRIS = (148, 163, 184)
+COLOR_GRIS_OSCURO = (71, 85, 105)
 COLOR_FONDO = (15, 23, 42)
+COLOR_PANEL = (30, 41, 59)
+COLOR_PANEL_HOVER = (51, 65, 85)
+COLOR_TEXTO_SECUNDARIO = (203, 213, 225)
 
 ESTADO_MENU = "menu"
 ESTADO_JUGANDO = "jugando"
@@ -76,7 +85,7 @@ class JuegoDeteccionCaries:
         self.experiencia = None
         
         self.puntos = 0
-        self.vidas = 10
+        self.vidas = 5
         self.racha = 0
         self.racha_maxima = 0
         self.tiempo_inicio = 0
@@ -99,6 +108,9 @@ class JuegoDeteccionCaries:
         self.fuente_mediana = pygame.font.Font(None, 36)
         self.fuente_pequena = pygame.font.Font(None, 26)
         
+        self.feedback_alpha = 0
+        self.feedback_timer = 0
+        
         self.ranking = []
         self.cargar_ranking()
         
@@ -107,6 +119,9 @@ class JuegoDeteccionCaries:
         self.fondo_imagen = None
         self.cargar_fondo()
         
+        self.tooth_icon = None
+        self.cargar_icono_diente()
+        
         self.musica_cargada = False
         self.cargar_musica()
         
@@ -114,6 +129,99 @@ class JuegoDeteccionCaries:
         self.inicializar_excel()
         
         self.cargar_datos_desde_json()
+    
+    def dibujar_panel_moderno(self, rect, color_fondo, radio=20, sombra=True, intensidad_sombra=40):
+        """Dibuja un panel con esquinas redondeadas y sombra suave"""
+        if sombra:
+            # Sombra suave con múltiples capas
+            for i in range(3):
+                offset = 2 + i * 2
+                alpha = intensidad_sombra - i * 10
+                sombra_rect = rect.copy()
+                sombra_rect.x += offset
+                sombra_rect.y += offset
+                sombra_surf = pygame.Surface((sombra_rect.width, sombra_rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(sombra_surf, (0, 0, 0, alpha), sombra_surf.get_rect(), border_radius=radio)
+                self.ventana.blit(sombra_surf, (sombra_rect.x, sombra_rect.y))
+        
+        # Panel principal con bordes redondeados
+        pygame.draw.rect(self.ventana, color_fondo, rect, border_radius=radio)
+    
+    def dibujar_panel_glass(self, rect, alpha=180):
+        """Panel estilo glassmorphism minimalista"""
+        superficie = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        # Fondo semi-transparente más sutil
+        superficie.fill((255, 255, 255, alpha // 8))
+        
+        # Borde sutil
+        pygame.draw.rect(superficie, (255, 255, 255, alpha // 4), 
+                         superficie.get_rect(), width=1, border_radius=20)
+        
+        self.ventana.blit(superficie, (rect.x, rect.y))
+    
+    def dibujar_gradiente(self, superficie, rect, color_inicio, color_fin, horizontal=False):
+        """Dibuja un gradiente suave"""
+        if horizontal:
+            for i in range(rect.width):
+                ratio = i / rect.width
+                color = tuple(int(color_inicio[j] + (color_fin[j] - color_inicio[j]) * ratio) for j in range(3))
+                pygame.draw.line(superficie, color, (rect.x + i, rect.y), (rect.x + i, rect.y + rect.height))
+        else:
+            for i in range(rect.height):
+                ratio = i / rect.height
+                color = tuple(int(color_inicio[j] + (color_fin[j] - color_inicio[j]) * ratio) for j in range(3))
+                pygame.draw.line(superficie, color, (rect.x, rect.y + i), (rect.x + rect.width, rect.y + i))
+    
+    def dibujar_diente(self, x, y, size, color):
+        """Dibuja un icono de diente (usa imagen o fallback)"""
+        if self.tooth_icon:
+            # Escalar el icono al tamaño deseado
+            scaled_icon = pygame.transform.scale(self.tooth_icon, (size, size))
+            self.ventana.blit(scaled_icon, (x, y))
+        else:
+            # Fallback: dibujar diente con formas
+            corona_points = [
+                (x + size * 0.2, y + size * 0.4),
+                (x + size * 0.3, y + size * 0.1),
+                (x + size * 0.4, y + size * 0.3),
+                (x + size * 0.5, y),
+                (x + size * 0.6, y + size * 0.3),
+                (x + size * 0.7, y + size * 0.1),
+                (x + size * 0.8, y + size * 0.4),
+            ]
+            pygame.draw.polygon(self.ventana, color, corona_points)
+            raiz_rect = pygame.Rect(x + size * 0.25, y + size * 0.35, size * 0.5, size * 0.55)
+            pygame.draw.ellipse(self.ventana, color, raiz_rect)
+    
+    def dibujar_corazon(self, x, y, size, color, filled=True):
+        """Dibuja un corazón bonito y suave"""
+        # Crear superficie para el corazón
+        heart_surface = pygame.Surface((size, size), pygame.SRCALPHA)
+        
+        # Dibujar corazón usando curvas Bézier aproximadas con círculos
+        center_x = size // 2
+        
+        # Dos círculos superiores (lóbulos del corazón)
+        left_circle = (center_x - size // 4, size // 3)
+        right_circle = (center_x + size // 4, size // 3)
+        radius = size // 3
+        
+        pygame.draw.circle(heart_surface, color, left_circle, radius)
+        pygame.draw.circle(heart_surface, color, right_circle, radius)
+        
+        # Triángulo inferior (punta del corazón)
+        points = [
+            (center_x - size // 2 + 2, size // 3),
+            (center_x, size - 2),
+            (center_x + size // 2 - 2, size // 3)
+        ]
+        pygame.draw.polygon(heart_surface, color, points)
+        
+        # Rectángulo central para rellenar huecos
+        pygame.draw.rect(heart_surface, color, (center_x - size // 3, size // 3, size // 2, size // 3))
+        
+        # Blit en la ventana
+        self.ventana.blit(heart_surface, (x, y))
     
     def cargar_fondo(self):
         """Carga la imagen de fondo de la pantalla"""
@@ -128,6 +236,19 @@ class JuegoDeteccionCaries:
         except Exception as e:
             print(f"⚠️  Error al cargar fondo: {e}")
             self.fondo_imagen = None
+    
+    def cargar_icono_diente(self):
+        """Carga el icono de diente"""
+        try:
+            if os.path.exists('tooth.png'):
+                self.tooth_icon = pygame.image.load('tooth.png')
+                print("✅ Icono de diente cargado")
+            else:
+                print("⚠️  No se encontró tooth.png")
+                self.tooth_icon = None
+        except Exception as e:
+            print(f"⚠️  Error al cargar icono: {e}")
+            self.tooth_icon = None
     
     def cargar_musica(self):
         """Carga y reproduce la música de fondo en bucle"""
@@ -427,7 +548,7 @@ class JuegoDeteccionCaries:
         print(f"\n🎲 Imágenes aleatorizadas: {len(self.datos_juego)}")
         
         self.puntos = 0
-        self.vidas = 10
+        self.vidas = 5
         self.racha = 0
         self.racha_maxima = 0
         self.pregunta_actual = 0
@@ -541,137 +662,265 @@ class JuegoDeteccionCaries:
     
     def dibujar_menu(self):
         """Dibuja el menú principal"""
-        if self.fondo_imagen:
-            self.ventana.blit(self.fondo_imagen, (0, 0))
-        else:
-            self.ventana.fill(COLOR_FONDO)
+        # Fondo blanco limpio
+        self.ventana.fill((255, 255, 255))
         
-        titulo = self.fuente_titulo.render("¿ERES CAPAZ DE DETECTAR CARIES EN IMÁGENES NIRI?", True, COLOR_BLANCO)
-        rect_titulo = titulo.get_rect(center=(ANCHO_VENTANA // 2, 80))
-        self.ventana.blit(titulo, rect_titulo)
+        # Alineación consistente para todo el contenido - más a la izquierda
+        nombre_x = 200
         
-        subtitulo = self.fuente_pequena.render("Demuestra tu habilidad para detectar caries en imágenes NIRI", True, COLOR_GRIS)
-        rect_subtitulo = subtitulo.get_rect(center=(ANCHO_VENTANA // 2, 130))
-        self.ventana.blit(subtitulo, rect_subtitulo)
+        # Icono de diente alineado con el contenido
+        diente_x = nombre_x
+        diente_y = 60
+        self.dibujar_diente(diente_x, diente_y, 60, COLOR_AZUL)
         
-        y_actual = 180
-        texto_nombre = self.fuente_mediana.render("Tu nombre:", True, COLOR_BLANCO)
-        self.ventana.blit(texto_nombre, (100, y_actual))
+        # Título principal alineado con el contenido
+        titulo1 = self.fuente_titulo.render("¿Puedes detectar caries", True, (30, 41, 59))
+        titulo2 = self.fuente_titulo.render("en imágenes NIRI?", True, (30, 41, 59))
+        self.ventana.blit(titulo1, (diente_x + 80, diente_y + 5))
+        self.ventana.blit(titulo2, (diente_x + 80, diente_y + 50))
         
-        color_input = COLOR_AZUL if self.input_activo else COLOR_GRIS
-        pygame.draw.rect(self.ventana, color_input, (100, y_actual + 40, 400, 50), 2)
-        texto_input = self.fuente_mediana.render(self.nombre_jugador, True, COLOR_BLANCO)
-        self.ventana.blit(texto_input, (110, y_actual + 50))
-        self.rect_input = pygame.Rect(100, y_actual + 40, 400, 50)
+        # Subtítulo alineado a la izquierda con margen
+        subtitulo = self.fuente_pequena.render("Entrena tus habilidades de diagnóstico visual", True, COLOR_GRIS)
+        self.ventana.blit(subtitulo, (nombre_x, 160))
         
-        y_actual += 120
-        texto_experiencia = self.fuente_mediana.render("Nivel de Experiencia en imágenes NIRI:", True, COLOR_BLANCO)
-        self.ventana.blit(texto_experiencia, (100, y_actual))
+        # Contenedor de formulario
+        y_actual = 220
         
-        y_actual += 50
-        color_principiante = COLOR_VERDE if self.experiencia == EXPERIENCIA_PRINCIPIANTE else COLOR_GRIS
-        rect_principiante = pygame.Rect(100, y_actual, 250, 80)
-        pygame.draw.rect(self.ventana, color_principiante, rect_principiante, 3)
+        # Nombre
+        texto_nombre = self.fuente_mediana.render("Nombre", True, (30, 41, 59))
+        self.ventana.blit(texto_nombre, (nombre_x, y_actual))
         
-        texto_prin = self.fuente_mediana.render("0-5 años", True, COLOR_BLANCO)
-        self.ventana.blit(texto_prin, (130, y_actual + 10))
-        texto_prin_desc = self.fuente_pequena.render("Casos fáciles y medios", True, COLOR_GRIS)
-        self.ventana.blit(texto_prin_desc, (130, y_actual + 45))
-        self.rect_principiante = rect_principiante
+        rect_input = pygame.Rect(nombre_x, y_actual + 40, 480, 55)
+        color_input = COLOR_AZUL if self.input_activo else (226, 232, 240)
         
-        color_avanzado = COLOR_VERDE if self.experiencia == EXPERIENCIA_AVANZADO else COLOR_GRIS
-        rect_avanzado = pygame.Rect(380, y_actual, 250, 80)
-        pygame.draw.rect(self.ventana, color_avanzado, rect_avanzado, 3)
+        # Input con fondo blanco y borde sutil
+        pygame.draw.rect(self.ventana, (255, 255, 255), rect_input, border_radius=12)
+        pygame.draw.rect(self.ventana, color_input, rect_input, 2, border_radius=12)
         
-        texto_avan = self.fuente_mediana.render("5+ años", True, COLOR_BLANCO)
-        self.ventana.blit(texto_avan, (410, y_actual + 10))
-        texto_avan_desc = self.fuente_pequena.render("Casos medios y difíciles", True, COLOR_GRIS)
-        self.ventana.blit(texto_avan_desc, (410, y_actual + 45))
-        self.rect_avanzado = rect_avanzado
+        texto_input = self.fuente_mediana.render(self.nombre_jugador, True, (30, 41, 59))
+        self.ventana.blit(texto_input, (nombre_x + 20, y_actual + 55))
+        self.rect_input = rect_input
         
         y_actual += 130
+        texto_experiencia = self.fuente_mediana.render("Nivel de experiencia", True, (30, 41, 59))
+        self.ventana.blit(texto_experiencia, (nombre_x, y_actual))
+        
+        y_actual += 45
+        card_x = nombre_x
+        card_width = 230
+        card_height = 75
+        
+        rect_principiante = pygame.Rect(card_x, y_actual, card_width, card_height)
+        es_seleccionado_prin = self.experiencia == EXPERIENCIA_PRINCIPIANTE
+        
+        # Card de principiante
+        if es_seleccionado_prin:
+            pygame.draw.rect(self.ventana, (239, 246, 255), rect_principiante, border_radius=12)
+            pygame.draw.rect(self.ventana, COLOR_AZUL, rect_principiante, 2, border_radius=12)
+        else:
+            pygame.draw.rect(self.ventana, (255, 255, 255), rect_principiante, border_radius=12)
+            pygame.draw.rect(self.ventana, (226, 232, 240), rect_principiante, 2, border_radius=12)
+        
+        # Icono de diente pequeño
+        self.dibujar_diente(card_x + 15, y_actual + 20, 25, COLOR_AZUL if es_seleccionado_prin else COLOR_GRIS)
+        
+        texto_prin = self.fuente_mediana.render("0-5 años", True, (30, 41, 59))
+        self.ventana.blit(texto_prin, (card_x + 50, y_actual + 25))
+        self.rect_principiante = rect_principiante
+        
+        rect_avanzado = pygame.Rect(card_x + card_width + 20, y_actual, card_width, card_height)
+        es_seleccionado_avan = self.experiencia == EXPERIENCIA_AVANZADO
+        
+        # Card de avanzado
+        if es_seleccionado_avan:
+            pygame.draw.rect(self.ventana, (239, 246, 255), rect_avanzado, border_radius=12)
+            pygame.draw.rect(self.ventana, COLOR_AZUL, rect_avanzado, 2, border_radius=12)
+        else:
+            pygame.draw.rect(self.ventana, (255, 255, 255), rect_avanzado, border_radius=12)
+            pygame.draw.rect(self.ventana, (226, 232, 240), rect_avanzado, 2, border_radius=12)
+        
+        # Icono de diente pequeño
+        self.dibujar_diente(card_x + card_width + 35, y_actual + 20, 25, COLOR_AZUL if es_seleccionado_avan else COLOR_GRIS)
+        
+        texto_avan = self.fuente_mediana.render("5+ años", True, (30, 41, 59))
+        self.ventana.blit(texto_avan, (card_x + card_width + 70, y_actual + 25))
+        self.rect_avanzado = rect_avanzado
+        
+        y_actual += 110
+        texto_instrucciones = self.fuente_mediana.render("Instrucciones", True, (30, 41, 59))
+        self.ventana.blit(texto_instrucciones, (nombre_x, y_actual))
+        
+        # Panel de instrucciones con fondo blanco 
+        instrucciones_rect = pygame.Rect(nombre_x, y_actual + 40, 480, 135)
+        pygame.draw.rect(self.ventana, (255, 255, 255), instrucciones_rect, border_radius=12)
+        pygame.draw.rect(self.ventana, (226, 232, 240), instrucciones_rect, 2, border_radius=12)
 
         instrucciones = [
-            "Instrucciones:",
-            "1. Ingresa tu nombre y selecciona tu nivel de experiencia",
-            "2. Dibuja polígonos marcando los bordes de las caries",
-            "3. Gana puntos por precisión y velocidad",
-            "4. Mantén una racha para bonificaciones extra"
+            "• Dibuja polígonos alrededor de posibles caries",
+            "• Gana puntos por precisión y velocidad",
+            "• Mantén una racha para obtener bonificaciones"
         ]
 
         for i, linea in enumerate(instrucciones):
-            fuente = self.fuente_mediana if i == 0 else self.fuente_pequena
-            color = COLOR_BLANCO if i == 0 else COLOR_GRIS
-            texto = fuente.render(linea, True, color)
-            self.ventana.blit(texto, (100, y_actual + i * 30))
+            texto = self.fuente_pequena.render(linea, True, (71, 85, 105))
+            self.ventana.blit(texto, (nombre_x + 20, y_actual + 60 + i * 35))
         
-        y_actual += 170
+        y_actual += 210
+        
         puede_iniciar = (len(self.nombre_jugador) > 0 and self.experiencia is not None and len(self.datos_juego) > 0)
         
-        color_boton = COLOR_VERDE if puede_iniciar else COLOR_GRIS
-        rect_boton = pygame.Rect(ANCHO_VENTANA // 2 - 150, y_actual, 300, 60)
-        pygame.draw.rect(self.ventana, color_boton, rect_boton, 0 if puede_iniciar else 3)
+        rect_boton = pygame.Rect(nombre_x, y_actual, 480, 60)
+        mouse_pos = pygame.mouse.get_pos()
+        es_hover = rect_boton.collidepoint(mouse_pos) if puede_iniciar else False
         
-        texto_boton = self.fuente_grande.render("INICIAR JUEGO", True, COLOR_BLANCO)
+        # Botón azul como en el mockup
+        if puede_iniciar:
+            color_boton = (37, 99, 235) if es_hover else COLOR_AZUL
+            pygame.draw.rect(self.ventana, color_boton, rect_boton, border_radius=12)
+        else:
+            pygame.draw.rect(self.ventana, (203, 213, 225), rect_boton, border_radius=12)
+        
+        texto_boton = self.fuente_grande.render("Iniciar Juego", True, COLOR_BLANCO)
         rect_texto = texto_boton.get_rect(center=rect_boton.center)
         self.ventana.blit(texto_boton, rect_texto)
         self.rect_iniciar = rect_boton if puede_iniciar else None
         
         if len(self.ranking) > 0:
-            y_ranking = 180
-            x_ranking = ANCHO_VENTANA - 420
+            y_ranking = 280
+            x_ranking = ANCHO_VENTANA - 480
             
-            titulo_ranking = self.fuente_mediana.render("Top 5", True, COLOR_AMARILLO)
+            # Panel de ranking con fondo blanco - más grande
+            ranking_panel = pygame.Rect(x_ranking - 20, y_ranking - 20, 340, 450)
+            pygame.draw.rect(self.ventana, (255, 255, 255), ranking_panel, border_radius=16)
+            pygame.draw.rect(self.ventana, (226, 232, 240), ranking_panel, 2, border_radius=16)
+            
+            titulo_ranking = self.fuente_grande.render("TOP 5", True, (30, 41, 59))
             self.ventana.blit(titulo_ranking, (x_ranking, y_ranking))
             
             for i, entrada in enumerate(self.ranking[:5]):
-                y_pos = y_ranking + 40 + i * 60
-                pygame.draw.rect(self.ventana, (30, 41, 59), (x_ranking, y_pos, 350, 50))
+                y_pos = y_ranking + 60 + i * 70
                 
-                pos_texto = self.fuente_mediana.render(f"#{i+1}", True, COLOR_AMARILLO)
-                self.ventana.blit(pos_texto, (x_ranking + 10, y_pos + 5))
+                nombre_texto = self.fuente_mediana.render(entrada['nombre'], True, (30, 41, 59))
+                self.ventana.blit(nombre_texto, (x_ranking, y_pos))
                 
-                nombre_texto = self.fuente_pequena.render(entrada['nombre'], True, COLOR_BLANCO)
-                self.ventana.blit(nombre_texto, (x_ranking + 60, y_pos + 5))
+                precision_texto = self.fuente_mediana.render(f"{entrada['precision']}%", True, (71, 85, 105))
+                self.ventana.blit(precision_texto, (x_ranking + 230, y_pos))
                 
-                puntos_texto = self.fuente_mediana.render(str(entrada['puntos']), True, COLOR_VERDE)
-                self.ventana.blit(puntos_texto, (x_ranking + 250, y_pos + 5))
-                
-                precision_texto = self.fuente_pequena.render(f"{entrada['precision']}%", True, COLOR_GRIS)
-                self.ventana.blit(precision_texto, (x_ranking + 60, y_pos + 28))
+                # Línea separadora sutil
+                if i < len(self.ranking[:5]) - 1:
+                    pygame.draw.line(self.ventana, (226, 232, 240), 
+                                   (x_ranking, y_pos + 45), 
+                                   (x_ranking + 300, y_pos + 45), 1)
     
     def dibujar_jugando(self):
         """Dibuja la pantalla de juego - versión simplificada para ahorrar espacio"""
-        if self.fondo_imagen:
-            self.ventana.blit(self.fondo_imagen, (0, 0))
-        else:
-            self.ventana.fill(COLOR_FONDO)
+        # Fondo blanco limpio como el menú
+        self.ventana.fill((255, 255, 255))
         
         pregunta = self.datos_juego[self.pregunta_actual]
         nombre_imagen = pregunta['imageName']
         
-        # Panel superior con stats (código simplificado - funciona igual)
-        y_stats = 20
-        self.ventana.blit(self.fuente_mediana.render(f"Pregunta: {self.pregunta_actual + 1}/{len(self.datos_juego)}", True, COLOR_BLANCO), (20, y_stats))
-        self.ventana.blit(self.fuente_mediana.render(f"Puntos: {self.puntos}", True, COLOR_VERDE), (220, y_stats))
-        self.ventana.blit(self.fuente_mediana.render("Vidas: ", True, COLOR_ROJO), (420, y_stats))
-        for i in range(self.vidas):
-            pygame.draw.circle(self.ventana, COLOR_ROJO, (510 + i * 30, y_stats + 15), 10)
+        # Panel superior moderno con stats - fondo azul
+        stats_panel = pygame.Rect(20, 20, ANCHO_VENTANA - 40, 80)
+        pygame.draw.rect(self.ventana, (239, 246, 255), stats_panel, border_radius=12)
+        pygame.draw.rect(self.ventana, COLOR_AZUL, stats_panel, 2, border_radius=12)
+        
+        # Centrar verticalmente todos los elementos
+        panel_center_y = stats_panel.centery
+        
+        # Calcular espacio disponible y distribuir elementos uniformemente
+        panel_width = stats_panel.width
+        padding = 40  # Padding desde los bordes
+        num_sections = 4  # Pregunta, Puntos, Vidas, Tiempo
+        section_width = (panel_width - 2 * padding) / num_sections
+        
+        # Sección 1: Pregunta con indicador visual
+        pregunta_x_base = stats_panel.left + padding
+        pregunta_y = panel_center_y - 20
+        pygame.draw.circle(self.ventana, COLOR_AZUL, (pregunta_x_base + 25, panel_center_y), 12)
+        pregunta_mini = self.fuente_mediana.render(str(self.pregunta_actual + 1), True, COLOR_BLANCO)
+        pregunta_mini_rect = pregunta_mini.get_rect(center=(pregunta_x_base + 25, panel_center_y))
+        self.ventana.blit(pregunta_mini, pregunta_mini_rect)
+        pregunta_texto = self.fuente_grande.render(f"/{len(self.datos_juego)}", True, (30, 41, 59))
+        self.ventana.blit(pregunta_texto, (pregunta_x_base + 42, pregunta_y))
+        
+        # Sección 2: Puntos con estrella y etiqueta
+        star_x_base = int(pregunta_x_base + section_width + 20)
+        star_y_base = panel_center_y - 15
+        
+        # Label encima y a la izquierda de la estrella
+        puntos_label = self.fuente_pequena.render("Puntos:", True, (71, 85, 105))
+        self.ventana.blit(puntos_label, (star_x_base - 15, panel_center_y - 28))
+        
+        star_points = [
+            (star_x_base, star_y_base + 5),
+            (star_x_base + 5, star_y_base + 15),
+            (star_x_base + 15, star_y_base + 15),
+            (star_x_base + 7, star_y_base + 20),
+            (star_x_base + 10, star_y_base + 30),
+            (star_x_base, star_y_base + 25),
+            (star_x_base - 10, star_y_base + 30),
+            (star_x_base - 7, star_y_base + 20),
+            (star_x_base - 15, star_y_base + 15),
+            (star_x_base - 5, star_y_base + 15)
+        ]
+        pygame.draw.polygon(self.ventana, COLOR_AMARILLO, star_points)
+        puntos_texto = self.fuente_mediana.render(f"{self.puntos}", True, (30, 41, 59))
+        self.ventana.blit(puntos_texto, (star_x_base + 25, panel_center_y - 2))
+        
+        # Sección 3: Vidas con corazones
+        vida_label_x = int(pregunta_x_base + 2 * section_width)
+        vida_texto = self.fuente_pequena.render("Vidas:", True, (71, 85, 105))
+        self.ventana.blit(vida_texto, (vida_label_x, panel_center_y - 23))
+        
+        vida_x = vida_label_x
+        vida_y = panel_center_y - 2
+        heart_size = 24
+        for i in range(5):
+            heart_x = vida_x + i * 28
+            if i < self.vidas:
+                # Corazón rojo lleno
+                self.dibujar_corazon(heart_x, vida_y, heart_size, COLOR_ROJO, filled=True)
+            else:
+                # Corazón gris vacío
+                self.dibujar_corazon(heart_x, vida_y, heart_size, (70, 70, 70), filled=True)
+        
+        # Sección 4: Tiempo con icono de reloj
+        clock_x = int(pregunta_x_base + 3 * section_width)
+        clock_label_texto = self.fuente_pequena.render("Tiempo:", True, (71, 85, 105))
+        self.ventana.blit(clock_label_texto, (clock_x, panel_center_y - 23))
+        
+        clock_icon_x, clock_icon_y = clock_x + 10, panel_center_y + 8
+        pygame.draw.circle(self.ventana, (30, 41, 59), (clock_icon_x, clock_icon_y), 12, 2)
+        pygame.draw.line(self.ventana, (30, 41, 59), (clock_icon_x, clock_icon_y), (clock_icon_x, clock_icon_y - 6), 2)
+        pygame.draw.line(self.ventana, (30, 41, 59), (clock_icon_x, clock_icon_y), (clock_icon_x + 5, clock_icon_y), 2)
+        
         tiempo = int((pygame.time.get_ticks() / 1000) - self.tiempo_inicio)
-        self.ventana.blit(self.fuente_mediana.render(f"Tiempo: {tiempo//60}:{tiempo%60:02d}", True, COLOR_AZUL), (620, y_stats))
+        tiempo_texto = self.fuente_mediana.render(f"{tiempo//60}:{tiempo%60:02d}", True, (30, 41, 59))
+        self.ventana.blit(tiempo_texto, (clock_x + 35, panel_center_y - 2))
         
         if self.racha >= 3:
-            texto_racha = self.fuente_grande.render(f"RACHA x{self.racha}", True, COLOR_AMARILLO)
-            if pygame.time.get_ticks() % 1000 < 500:
-                self.ventana.blit(texto_racha, texto_racha.get_rect(center=(ANCHO_VENTANA // 2, y_stats + 50)))
+            # Racha con diseño flat moderno
+            racha_rect = pygame.Rect(ANCHO_VENTANA // 2 - 140, 110, 280, 60)
+            self.dibujar_panel_moderno(racha_rect, COLOR_AMARILLO, radio=30, sombra=True, intensidad_sombra=50)
+            
+            texto_racha = self.fuente_grande.render(f"RACHA x{self.racha}!", True, COLOR_NEGRO)
+            self.ventana.blit(texto_racha, texto_racha.get_rect(center=racha_rect.center))
         
-        y_imagen = 100 if self.racha < 3 else 140
+        y_imagen = 140 if self.racha < 3 else 210
         
         if nombre_imagen in self.imagenes_cargadas:
             imagen = self.imagenes_cargadas[nombre_imagen]
-            escala = min(800 / imagen.get_width(), (ALTO_VENTANA - y_imagen - 80) / imagen.get_height(), 1.0)
+            # Más espacio para la imagen y mejor centrado
+            max_width = 850
+            max_height = ALTO_VENTANA - y_imagen - 30
+            escala = min(max_width / imagen.get_width(), max_height / imagen.get_height(), 1.0)
             imagen_escalada = pygame.transform.scale(imagen, (int(imagen.get_width() * escala), int(imagen.get_height() * escala)))
-            rect_imagen = imagen_escalada.get_rect(topleft=(50, y_imagen))
+            
+            # Centrar la imagen en el espacio disponible
+            espacio_disponible = ANCHO_VENTANA - 480 - 150  # Entre contenido izquierdo y panel derecho
+            x_centrado = 150 + (espacio_disponible - imagen_escalada.get_width()) // 2
+            rect_imagen = imagen_escalada.get_rect(topleft=(x_centrado, y_imagen))
             self.ventana.blit(imagen_escalada, rect_imagen)
             
             if len(self.puntos_poligono) > 0:
@@ -691,19 +940,17 @@ class JuegoDeteccionCaries:
             self.escala_imagen = escala
         
               # *** PANEL LATERAL DERECHO ***
-        x_panel = ANCHO_VENTANA - 380
+        x_panel = ANCHO_VENTANA - 480
         y_panel = y_imagen
         ancho_panel = 360
         
-        # Fondo del panel
-        pygame.draw.rect(
-            self.ventana, 
-            (30, 41, 59), 
-            (x_panel, y_panel, ancho_panel, ALTO_VENTANA - y_panel - 20)
-        )
+        # Panel lateral moderno - fondo azul
+        panel_rect = pygame.Rect(x_panel, y_panel, ancho_panel, ALTO_VENTANA - y_panel - 30)
+        pygame.draw.rect(self.ventana, (239, 246, 255), panel_rect, border_radius=16)
+        pygame.draw.rect(self.ventana, COLOR_AZUL, panel_rect, 2, border_radius=16)
         
         # Título del panel
-        titulo_panel = self.fuente_mediana.render("Tu Progreso", True, COLOR_BLANCO)
+        titulo_panel = self.fuente_mediana.render("Tu Progreso", True, (30, 41, 59))
         self.ventana.blit(titulo_panel, (x_panel + 20, y_panel + 20))
         
         y_info = y_panel + 70
@@ -715,90 +962,133 @@ class JuegoDeteccionCaries:
             else COLOR_AMARILLO if dificultad == DIFICULTAD_MEDIA 
             else COLOR_ROJO
         )
-        texto_dificultad_label = self.fuente_pequena.render("Dificultad:", True, COLOR_GRIS)
-        self.ventana.blit(texto_dificultad_label, (x_panel + 20, y_info))
+        
+        dificultad_rect = pygame.Rect(x_panel + 20, y_info, 320, 40)
+        pygame.draw.rect(self.ventana, color_dificultad, dificultad_rect, border_radius=12)
         
         texto_dificultad = self.fuente_pequena.render(
-            dificultad.upper(), 
+            f"Dificultad: {dificultad.upper()}", 
             True, 
-            color_dificultad
+            COLOR_BLANCO
         )
-        self.ventana.blit(texto_dificultad, (x_panel + 220, y_info))
+        self.ventana.blit(texto_dificultad, (x_panel + 30, y_info + 10))
         
         # Racha actual
-        y_info += 40
-        texto_racha_label = self.fuente_pequena.render("Racha actual:", True, COLOR_GRIS)
+        y_info += 60
+        texto_racha_label = self.fuente_pequena.render("Racha actual:", True, (71, 85, 105))
         self.ventana.blit(texto_racha_label, (x_panel + 20, y_info))
-        texto_racha_valor = self.fuente_pequena.render(str(self.racha), True, COLOR_AMARILLO)
-        self.ventana.blit(texto_racha_valor, (x_panel + 220, y_info))
+        texto_racha_valor = self.fuente_mediana.render(str(self.racha), True, COLOR_AMARILLO)
+        self.ventana.blit(texto_racha_valor, (x_panel + 270, y_info - 3))
         
         # Mejor racha
-        y_info += 40
-        texto_max_racha_label = self.fuente_pequena.render("Mejor racha:", True, COLOR_GRIS)
+        y_info += 50
+        texto_max_racha_label = self.fuente_pequena.render("Mejor racha:", True, (71, 85, 105))
         self.ventana.blit(texto_max_racha_label, (x_panel + 20, y_info))
-        texto_max_racha_valor = self.fuente_pequena.render(
+        texto_max_racha_valor = self.fuente_mediana.render(
             str(self.racha_maxima), 
             True, 
             COLOR_VERDE
         )
-        self.ventana.blit(texto_max_racha_valor, (x_panel + 220, y_info))
+        self.ventana.blit(texto_max_racha_valor, (x_panel + 270, y_info - 3))
         
         # Puntos marcados
-        y_info += 40
-        texto_puntos_label = self.fuente_pequena.render("Puntos marcados:", True, COLOR_GRIS)
+        y_info += 50
+        texto_puntos_label = self.fuente_pequena.render("Puntos marcados:", True, (71, 85, 105))
         self.ventana.blit(texto_puntos_label, (x_panel + 20, y_info))
-        texto_puntos_valor = self.fuente_pequena.render(
+        texto_puntos_valor = self.fuente_mediana.render(
             str(len(self.puntos_poligono)), 
             True, 
             COLOR_AZUL
         )
-        self.ventana.blit(texto_puntos_valor, (x_panel + 220, y_info))
+        self.ventana.blit(texto_puntos_valor, (x_panel + 270, y_info - 3))
         
-        # Instrucciones
-        y_info += 60
+        # Instrucciones simplificadas
+        y_info += 70
         instrucciones = [
-            "Instrucciones:",
-            "• Click para añadir puntos",
-            "• Primer punto en verde",
-            "• Mínimo 3 puntos",
-            "• Presiona ESPACIO para",
-            "  deshacer último punto",
-            "• Presiona ENTER para",
-            "  limpiar todo"
+            "Controles:",
+            "• Click: añadir puntos",
+            "• ESPACIO: deshacer",
+            "• ENTER: limpiar todo"
         ]
         
         for i, linea in enumerate(instrucciones):
             fuente = self.fuente_pequena
-            color = COLOR_BLANCO if i == 0 else COLOR_GRIS
+            color = (30, 41, 59) if i == 0 else (71, 85, 105)
             texto = fuente.render(linea, True, color)
-            self.ventana.blit(texto, (x_panel + 20, y_info + i * 25))
+            self.ventana.blit(texto, (x_panel + 20, y_info + i * 30))
         
-        # Botones de control
-        y_botones = ALTO_VENTANA - 180
+        # Botones de envío - diseño flat moderno
+        y_botones = ALTO_VENTANA - 250
         puede_enviar = len(self.puntos_poligono) >= 3 and not self.respondida
         puede_enviar_vacio = len(self.puntos_poligono) == 0 and not self.respondida
+        mouse_pos = pygame.mouse.get_pos()
         
-        rect_enviar = pygame.Rect(x_panel + 20, y_botones + 110, 320, 50)
-        pygame.draw.rect(self.ventana, COLOR_VERDE if (puede_enviar or puede_enviar_vacio) else COLOR_GRIS, rect_enviar, 0 if (puede_enviar or puede_enviar_vacio) else 2)
-        texto_enviar = self.fuente_mediana.render("ENVIAR RESPUESTA" if len(self.puntos_poligono) >= 3 else "SIN CARIES (ENVIAR)" if not self.respondida else "Esperando...", True, COLOR_BLANCO)
+        # Botón ENVIAR (para cuando hay polígono)
+        rect_enviar = pygame.Rect(x_panel + 20, y_botones + 110, 320, 60)
+        es_hover_enviar = rect_enviar.collidepoint(mouse_pos) if puede_enviar else False
+        
+        if puede_enviar:
+            color_enviar = COLOR_VERDE_HOVER if es_hover_enviar else COLOR_VERDE
+            self.dibujar_panel_moderno(rect_enviar, color_enviar, radio=16, sombra=True, intensidad_sombra=50)
+            if es_hover_enviar:
+                # Glow sutil
+                glow_surf = pygame.Surface((rect_enviar.width + 4, rect_enviar.height + 4), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surf, (*COLOR_VERDE, 60), glow_surf.get_rect(), border_radius=18)
+                self.ventana.blit(glow_surf, (rect_enviar.x - 2, rect_enviar.y - 2))
+        else:
+            pygame.draw.rect(self.ventana, COLOR_GRIS_OSCURO, rect_enviar, 2, border_radius=16)
+        
+        color_texto_enviar = COLOR_BLANCO if puede_enviar else COLOR_GRIS
+        texto_enviar = self.fuente_mediana.render("Enviar" if puede_enviar else "Esperando...", True, color_texto_enviar)
         self.ventana.blit(texto_enviar, texto_enviar.get_rect(center=rect_enviar.center))
-        self.rect_enviar = rect_enviar if (puede_enviar or puede_enviar_vacio) else None
+        self.rect_enviar = rect_enviar if puede_enviar else None
+        
+        # Botón SIN CARIES (siempre visible cuando no se ha respondido)
+        rect_sin_caries = pygame.Rect(x_panel + 20, y_botones + 40, 320, 55)
+        es_hover_sin_caries = rect_sin_caries.collidepoint(mouse_pos) if not self.respondida else False
+        
+        if not self.respondida:
+            color_sin_caries = COLOR_AZUL_CLARO if es_hover_sin_caries else COLOR_AZUL
+            pygame.draw.rect(self.ventana, color_sin_caries, rect_sin_caries, border_radius=12)
+            if es_hover_sin_caries:
+                glow_surf = pygame.Surface((rect_sin_caries.width + 4, rect_sin_caries.height + 4), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surf, (*COLOR_AZUL, 60), glow_surf.get_rect(), border_radius=14)
+                self.ventana.blit(glow_surf, (rect_sin_caries.x - 2, rect_sin_caries.y - 2))
+        else:
+            pygame.draw.rect(self.ventana, COLOR_GRIS_OSCURO, rect_sin_caries, 2, border_radius=12)
+        
+        color_texto_sin_caries = COLOR_BLANCO if not self.respondida else COLOR_GRIS
+        texto_sin_caries = self.fuente_mediana.render("Sin Caries", True, color_texto_sin_caries)
+        self.ventana.blit(texto_sin_caries, texto_sin_caries.get_rect(center=rect_sin_caries.center))
+        self.rect_sin_caries = rect_sin_caries if not self.respondida else None
         
         if self.mostrar_feedback:
-            superficie_feedback = pygame.Surface((ANCHO_VENTANA, 150), pygame.SRCALPHA)
-            pygame.draw.rect(superficie_feedback, (34, 197, 94, 200) if self.es_correcto else (239, 68, 68, 200), (0, 0, ANCHO_VENTANA, 150))
-            self.ventana.blit(superficie_feedback, (0, ALTO_VENTANA // 2 - 75))
-            texto_mensaje = self.fuente_grande.render(self.mensaje_feedback, True, COLOR_BLANCO)
-            self.ventana.blit(texto_mensaje, texto_mensaje.get_rect(center=(ANCHO_VENTANA // 2, ALTO_VENTANA // 2 - 20)))
-            texto_precision = self.fuente_mediana.render(f"Precisión: {self.precision_actual:.1f}%", True, COLOR_BLANCO)
-            self.ventana.blit(texto_precision, texto_precision.get_rect(center=(ANCHO_VENTANA // 2, ALTO_VENTANA // 2 + 20)))
+            # Animación de feedback - flat design
+            self.feedback_timer += 1
+            self.feedback_alpha = min(255, self.feedback_timer * 25)
+            
+            feedback_rect = pygame.Rect(ANCHO_VENTANA // 2 - 400, ALTO_VENTANA // 2 - 80, 800, 160)
+            
+            superficie_feedback = pygame.Surface((feedback_rect.width, feedback_rect.height), pygame.SRCALPHA)
+            color_base = COLOR_VERDE if self.es_correcto else COLOR_ROJO
+            color_con_alpha = (*color_base, min(230, self.feedback_alpha))
+            pygame.draw.rect(superficie_feedback, color_con_alpha, superficie_feedback.get_rect(), border_radius=24)
+            
+            self.ventana.blit(superficie_feedback, (feedback_rect.x, feedback_rect.y))
+            
+            if self.feedback_alpha > 50:
+                texto_mensaje = self.fuente_grande.render(self.mensaje_feedback, True, COLOR_BLANCO)
+                self.ventana.blit(texto_mensaje, texto_mensaje.get_rect(center=(ANCHO_VENTANA // 2, ALTO_VENTANA // 2 - 25)))
+                texto_precision = self.fuente_mediana.render(f"Precisión: {self.precision_actual:.1f}%", True, COLOR_BLANCO)
+                self.ventana.blit(texto_precision, texto_precision.get_rect(center=(ANCHO_VENTANA // 2, ALTO_VENTANA // 2 + 20)))
+        else:
+            self.feedback_timer = 0
+            self.feedback_alpha = 0
     
     def dibujar_resultados(self):
         """Dibuja la pantalla de resultados"""
-        if self.fondo_imagen:
-            self.ventana.blit(self.fondo_imagen, (0, 0))
-        else:
-            self.ventana.fill(COLOR_FONDO)
+        # Fondo blanco limpio como el menú
+        self.ventana.fill((255, 255, 255))
         
         total_preguntas = len(self.resultados_detallados)
         aciertos = sum(1 for r in self.resultados_detallados if r['correcto'])
@@ -810,14 +1100,25 @@ class JuegoDeteccionCaries:
         elif precision >= 60: nivel, icono, color_nivel = "INTERMEDIO", " ", (168, 85, 247)
         else: nivel, icono, color_nivel = "PRINCIPIANTE", " ", COLOR_GRIS
         
-        self.ventana.blit(self.fuente_titulo.render(icono, True, COLOR_BLANCO), self.fuente_titulo.render(icono, True, COLOR_BLANCO).get_rect(center=(ANCHO_VENTANA // 2, 80)))
-        self.ventana.blit(self.fuente_titulo.render("¡Juego Completado!", True, COLOR_BLANCO), self.fuente_titulo.render("¡Juego Completado!", True, COLOR_BLANCO).get_rect(center=(ANCHO_VENTANA // 2, 170)))
+        self.ventana.blit(self.fuente_titulo.render(icono, True, (30, 41, 59)), self.fuente_titulo.render(icono, True, (30, 41, 59)).get_rect(center=(ANCHO_VENTANA // 2, 80)))
+        self.ventana.blit(self.fuente_titulo.render("¡Juego Completado!", True, (30, 41, 59)), self.fuente_titulo.render("¡Juego Completado!", True, (30, 41, 59)).get_rect(center=(ANCHO_VENTANA // 2, 170)))
         self.ventana.blit(self.fuente_grande.render(nivel, True, color_nivel), self.fuente_grande.render(nivel, True, color_nivel).get_rect(center=(ANCHO_VENTANA // 2, 230)))
         self.ventana.blit(self.fuente_pequena.render("Datos guardados en Excel", True, COLOR_VERDE), self.fuente_pequena.render("Datos guardados en Excel", True, COLOR_VERDE).get_rect(center=(ANCHO_VENTANA // 2, 270)))
         
-        rect_volver = pygame.Rect(ANCHO_VENTANA // 2 - 150, ALTO_VENTANA - 100, 300, 60)
-        pygame.draw.rect(self.ventana, COLOR_AZUL, rect_volver)
-        self.ventana.blit(self.fuente_grande.render("VOLVER AL MENÚ", True, COLOR_BLANCO), self.fuente_grande.render("VOLVER AL MENÚ", True, COLOR_BLANCO).get_rect(center=rect_volver.center))
+        rect_volver = pygame.Rect(ANCHO_VENTANA // 2 - 180, ALTO_VENTANA - 120, 360, 70)
+        mouse_pos = pygame.mouse.get_pos()
+        es_hover_volver = rect_volver.collidepoint(mouse_pos)
+        
+        color_volver = COLOR_AZUL_CLARO if es_hover_volver else COLOR_AZUL
+        self.dibujar_panel_moderno(rect_volver, color_volver, radio=20, sombra=True, intensidad_sombra=60)
+        
+        if es_hover_volver:
+            glow_surf = pygame.Surface((rect_volver.width + 6, rect_volver.height + 6), pygame.SRCALPHA)
+            pygame.draw.rect(glow_surf, (*COLOR_AZUL, 70), glow_surf.get_rect(), border_radius=22)
+            self.ventana.blit(glow_surf, (rect_volver.x - 3, rect_volver.y - 3))
+        
+        texto_volver = self.fuente_grande.render("Volver al menú", True, COLOR_BLANCO)
+        self.ventana.blit(texto_volver, texto_volver.get_rect(center=rect_volver.center))
         self.rect_volver = rect_volver
     
     def manejar_eventos(self):
@@ -851,6 +1152,7 @@ class JuegoDeteccionCaries:
                         y = (pos[1] - self.rect_imagen.top) / self.escala_imagen
                         self.puntos_poligono.append((x, y))
                     if hasattr(self, 'rect_enviar') and self.rect_enviar and self.rect_enviar.collidepoint(pos): self.enviar_respuesta()
+                    if hasattr(self, 'rect_sin_caries') and self.rect_sin_caries and self.rect_sin_caries.collidepoint(pos): self.enviar_respuesta()
                 
                 if evento.type == pygame.KEYDOWN:
                     if evento.key == pygame.K_SPACE and not self.respondida and len(self.puntos_poligono) > 0: self.puntos_poligono.pop()
